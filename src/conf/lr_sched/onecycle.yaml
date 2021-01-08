@@ -1,0 +1,3 @@
+_target_: schedules.cos_onecycle_lr
+max_lr: 0.01
+num_steps: ${num_steps}

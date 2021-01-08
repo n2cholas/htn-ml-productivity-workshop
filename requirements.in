@@ -1,0 +1,13 @@
+jax
+jaxlib
+flax
+hydra-core==1.1.0.dev1  # for recursion instantiation
+isort
+numpy
+optax
+pyflakes
+pytest
+pre-commit
+shapecheck
+tensorflow
+yapf

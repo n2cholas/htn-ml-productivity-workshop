@@ -1,0 +1,2 @@
+_target_: models.FullyConnected
+layer_sizes: [20, 20]

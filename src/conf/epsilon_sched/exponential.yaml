@@ -1,0 +1,5 @@
+_target_: schedules.exponential_decay
+init_value: 1.0
+final_value: 1e-8
+num_decay_steps: ${num_steps}
+num_delay_steps: 100
