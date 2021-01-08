@@ -6,6 +6,8 @@ isort
 numpy
 optax
 pyflakes
+jupyter
+matplotlib
 pytest
 pre-commit
 shapecheck
