@@ -31,19 +31,14 @@ def accuracy(logits, labels):
 
 
 def get_train_step(model, criterion, optim_sched):
-    @jax.jit
     def train_step(batch, state):
         def loss_fn(params):
-            variables = {'params': params, **state.model_state}
-            logits, model_state = model.apply(variables,
-                                              batch['images'],
-                                              mutable=True,
-                                              train=True)
+            logits = model.apply(params, batch['images'])
             loss = criterion(logits, batch['labels'])
-            return loss, (logits, model_state)
+            return loss, logits
 
         grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (loss, (logits, model_state)), grad = grad_fn(state.optimizer.target)
+        (loss, logits), grad = grad_fn(state.optimizer.target)
 
         optimizer_hparams = optim_sched(state.step)
         optimizer = state.optimizer.apply_gradient(grad, **optimizer_hparams)
@@ -52,7 +47,6 @@ def get_train_step(model, criterion, optim_sched):
 
         return state.replace(
             optimizer=optimizer,
-            model_state=model_state,
             metrics=metrics,
             optimizer_hparams=optimizer_hparams,
             step=state.step + 1,
@@ -62,10 +56,8 @@ def get_train_step(model, criterion, optim_sched):
 
 
 def get_eval_step(model, criterion):
-    @jax.jit
-    def eval_step(batch, params, model_state, metrics):
-        variables = {'params': params, **model_state}
-        logits = model.apply(variables, batch['images'], mutable=False, train=False)
+    def eval_step(batch, params, metrics):
+        logits = model.apply(params, batch['images'])
         return metrics.update(loss=criterion(logits, batch['labels']),
                               accuracy=accuracy(logits, batch['labels']))
 
@@ -75,7 +67,6 @@ def get_eval_step(model, criterion):
 @flax.struct.dataclass
 class TrainState:
     optimizer: optim.Optimizer
-    model_state: Dict
     metrics: utils.MetricsGroup
     optimizer_hparams: Dict[str, Any]
     step: int
@@ -87,16 +78,14 @@ def main(cfg):
     rng, init_rng = jax.random.split(rng)
 
     model = hydra.utils.instantiate(cfg.model, n_classes=10)
-    variables = model.init(init_rng, jnp.ones((1, 28, 28, 1), jnp.float32))
-    model_state, init_params = variables.pop('params')
+    init_params = model.init(init_rng, jnp.ones((1, 28, 28, 1), jnp.float32))
 
     state = TrainState(
         optimizer=optim.Adam(learning_rate=0.01, weight_decay=0.,
                              eps=1e-4).create(init_params),
-        model_state=model_state,
         metrics=utils.MetricsGroup('loss', 'accuracy'),
         optimizer_hparams={},  # will be populated during step
-        step=0)
+        step=1)
 
     eps_fn = hydra.utils.call(cfg.epsilon_sched)
     mom_fn = hydra.utils.call(cfg.momentum_sched)
@@ -110,8 +99,8 @@ def main(cfg):
         }
 
     criterion = hydra.utils.call(cfg.loss)
-    train_step = get_train_step(model, criterion, schedule)
-    eval_step = get_eval_step(model, criterion)
+    train_step = jax.jit(get_train_step(model, criterion, schedule))
+    eval_step = jax.jit(get_eval_step(model, criterion))
     train_ds, val_ds = data.get_data(seed=cfg.seed,
                                      train_bs=cfg.train_bs,
                                      val_bs=cfg.val_bs,
@@ -141,7 +130,7 @@ def main(cfg):
             params = state.optimizer.target
             val_metrics = utils.MetricsGroup('loss', 'accuracy')
             for img, label in data.as_numpy(val_ds):
-                val_metrics = eval_step(batch, params, model_state, val_metrics)
+                val_metrics = eval_step(batch, params, val_metrics)
             print(f"Iter {i:5d}  "
                   f"Val Acc: {val_metrics['accuracy']:.4f}  "
                   f"Val Loss: {val_metrics['loss']:.4f}  "

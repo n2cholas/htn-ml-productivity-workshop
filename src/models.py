@@ -11,7 +11,7 @@ class FullyConnected(nn.Module):
 
     @nn.compact
     @check_shapes(None, 'N,W,W,1', out_='N,-1')
-    def __call__(self, x, train: bool = True):
+    def __call__(self, x):
         x = x.reshape((x.shape[0], -1))
         for h_size in self.layer_sizes:
             x = nn.Dense(h_size)(x)
@@ -27,7 +27,7 @@ class Convolutional(nn.Module):
 
     @nn.compact
     @check_shapes(None, 'N,W,W,1', out_='N,-1')
-    def __call__(self, x, train: bool = True):
+    def __call__(self, x):
         for h_size in self.layer_sizes:
             x = nn.Conv(h_size, self.kernel_size)(x)
             x = self.activation(x)
